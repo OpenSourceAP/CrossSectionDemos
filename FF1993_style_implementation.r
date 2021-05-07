@@ -1,7 +1,7 @@
 # for making FF1993 style factors from individual csvs on gdrive
 # andrew 2021 05
 
-
+# FF1993 style is based on WRDS:
 # https://wrds-www.wharton.upenn.edu/pages/support/applications/risk-factors-and-industry-benchmarks/fama-french-factors/
 
 # ==== ENVIRONMENT ====
@@ -20,8 +20,8 @@ pathRelease = 'https://drive.google.com/drive/folders/1I6nMmo8k_zGCcp9tUvmMedKTA
 url_prefix = 'https://drive.google.com/uc?export=download&id='
 
 # login to wrds
-# user = getPass('wrds username: ')
-# pass = getPass('wrds password: ')
+user = getPass('wrds username: ')
+pass = getPass('wrds password: ')
 
 wrds <- dbConnect(Postgres(),
                   host='wrds-pgdata.wharton.upenn.edu',
