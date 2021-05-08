@@ -1,6 +1,6 @@
 # CrossSectionDemos
 
-Example code of simple things one can do with [Open Source Asset Pricing data](https://sites.google.com/site/chenandrewy/open-source-ap).
+Example code of simple things one can do with [Open Source Asset Pricing data](https://sites.google.com/site/chenandrewy/open-source-ap), created with our [open source code](https://github.com/OpenSourceAP/CrossSection).
 
 Each file is an **independent script** that **automatically downloads** data from the internet. You just need the googledrive R package and a Google Drive account.
 
