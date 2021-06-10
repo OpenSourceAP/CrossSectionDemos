@@ -9,10 +9,11 @@ library(data.table)
 library(googledrive)
 library(readxl)
 library(RColorBrewer)
+library(lubridate)
 
 ### USER ENTRY
 # first signal will be the focus
-signallist = c('IndIPO')
+signallist = c('PS')
 # signallist = c('IndIPO','CompEquIss','ShareIss1Y')
 years_presamp = 15 # for x axis limits
 
@@ -110,5 +111,5 @@ ggplot(plotme, aes(x=date,y=cret)) +
   scale_color_brewer(palette = 'Dark2')
 
 
-ggsave('temp/plot_anomaly.pdf', width = 6, height = 4)
+ggsave('temp/plot_anomaly.png', width = 6, height = 4)
 
