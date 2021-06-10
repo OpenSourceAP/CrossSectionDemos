@@ -13,7 +13,8 @@ library(lubridate)
 
 ### USER ENTRY
 # first signal will be the focus
-signallist = c('PS')
+# use 'mkt_rf' to compare with market excess return (CRSPVW)
+signallist = c('PS','mkt_rf')
 # signallist = c('IndIPO','CompEquIss','ShareIss1Y')
 years_presamp = 15 # for x axis limits
 
@@ -53,10 +54,12 @@ signaldoc %>% select(signalname,Authors,LongDescription) %>% print(n=20)
 
 # ==== IMPORT DATA ====
 
-doctarget = signaldoc %>% filter(signalname == signallist[1])
+signaldribble = signallist[signallist != 'mkt_rf'] # mkt_rf is dl from ff, not here
+
+doctarget = signaldoc %>% filter(signalname == signaldribble[1])
 
 # download
-csvlist = signallist %>% paste0('.csv')
+csvlist = signaldribble %>% paste0('.csv')
 target_dribble = pathRelease %>% drive_ls() %>% 
   filter(name=='Portfolios') %>%  drive_ls() %>% 
   filter(name=='Individual') %>%  drive_ls() %>% 
@@ -75,6 +78,26 @@ for (i in 1:length(csvlist)){
   )
 }
 
+# ==== ADD MARKET BENCHMARK ====
+ffweb = 'http://mba.tuck.dartmouth.edu/pages/faculty/ken.french/ftp/F-F_Research_Data_Factors_CSV.zip'
+download.file(ffweb,'temp/deleteme.zip')
+unzip('temp/deleteme.zip', exdir = 'temp')
+
+ff = read.csv('temp/F-F_Research_Data_Factors.csv', skip=3, nrows = 1141 - 3 - 1) %>% 
+  as_tibble() %>% 
+  mutate_all(funs(as.numeric)) %>% 
+  transmute(
+    yearm = X, ret = Mkt.RF, signalname = 'mkt_rf'
+  )
+
+ff = ff %>% 
+  left_join(
+    port %>% transmute(date, yearm = year(date)*100+month(date))
+  ) %>% 
+  filter(!is.na(date)) %>% 
+  select(date, ret, signalname)
+
+port = rbind(port,ff)
 
 # ==== PLOT ====
 
