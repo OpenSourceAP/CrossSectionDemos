@@ -21,6 +21,8 @@ url_prefix = 'https://drive.google.com/uc?export=download&id='
 # this prompts a login
 pathRelease %>% drive_ls()
 
+# create temporary directory 
+dir.create('temp/')
 
 # ==== DOWNLOAD DATA =====
 
