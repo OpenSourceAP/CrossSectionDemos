@@ -102,13 +102,64 @@ sumsamp = sumsamp %>%
 
 sumsamp
 
-# ==== PLOT IN-SAMPLE VS OUT OF SAMPLE ====
+
+# ==== BOOTSTRAP MEAN DISTRIBUTIONS ====
+# clustered by month
+
+set.seed(6)
+
+nboot = 500
+
+bootfun = function(sampname){
+
+  # make wide dataset, use NA if not correct sample
+  wide_is = ret1 %>%
+    filter(samptype == sampname) %>% 
+    pivot_wider(
+      c(date, ret, signalname), names_from = signalname, values_from = ret
+    ) %>% 
+    select(-date) %>% 
+    as.matrix()
+  
+  # make array that only has enough signals in each month (10)
+  tgood = rowSums(!is.na(wide_is), na.rm=T) > 10
+  mat = wide_is[tgood, ]
+  T = dim(mat)[1]
+  
+  # bootstrap pooled mean
+  rboot = rep(NA_real_, nboot)
+  for (i in 1:nboot){
+    tempt = sample(1:T, replace = T)
+    rboot[i] = mat[tempt,]  %>% as.vector %>% mean(na.rm=T)
+  }
+  
+  return(rboot)
+
+} # end bootfun
 
 
-sumsignal  %>% 
-  filter(samptype != 'post-pub') %>% 
-  ggplot(aes(x=rbar, fill=samptype)) +
+# bootstrap for each sample type
+rboot1 = bootfun('in-samp')
+rboot2 = bootfun('out-of-samp')
+
+# compile and plot
+bootdat = data.frame(
+  pooled_mean_ret = rboot1, samptype = 'in-samp' 
+) %>% 
+  rbind(
+    data.frame(
+      pooled_mean_ret = rboot2, samptype = 'out-of-samp' 
+    )
+  )
+
+
+bootdat  %>% 
+  ggplot(aes(x=pooled_mean_ret, fill=samptype)) +
   geom_histogram(
-    alpha = 0.6, position = 'identity', breaks = seq(-2.5,5,0.25), aes(y=..density..)
-  ) 
+    alpha = 0.6, position = 'identity', breaks = seq(0,1,0.025), aes(y=..density..)
+  ) +
+  ggtitle('bootstrapped distribution') +
+  labs(x='pooled mean return (% monthly)') +
+  geom_vline(xintercept = 0)
+
 
