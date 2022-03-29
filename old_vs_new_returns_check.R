@@ -8,40 +8,61 @@ rm(list = ls())
 library(tidyverse)
 library(data.table)
 library(googledrive)
+library(gridExtra)
 
 dir.create('temp/')
 
 # Global constants
-URL_PREFIX <-  "https://drive.google.com/uc?export=download&id="
 OLD_PATH_RELEASES <- "https://drive.google.com/drive/folders/1I6nMmo8k_zGCcp9tUvmMedKTAkb9734R"
 NEW_PATH_RELEASES <- "https://drive.google.com/drive/folders/1O18scg9iBTiBaDiQFhoGxdn4FdsbMqGo"
+
+# use this for original papers
+SUBDIR = 'Full Sets OP'; FILENAME = 'PredictorPortsFull.csv'
+
+# use this for VW or whatever else
+# SUBDIR = 'Full Sets Alt'; FILENAME = 'PredictorAltPorts_QuintilesVW.zip'
+# SUBDIR = 'Full Sets Alt'; FILENAME = 'PredictorAltPorts_LiqScreen_VWforce.zip'
 
 #=====================================================================#
 # Download files                                                  ====
 #=====================================================================#
 
-# Get id of old PredictorPortsFull. Will prompt a google drive login.
-id <-  OLD_PATH_RELEASES %>% drive_ls() %>%
+# download old data
+OLD_PATH_RELEASES %>% drive_ls() %>%
   filter(name == "Portfolios") %>% drive_ls() %>% 
-  filter(name == "Full Sets OP") %>% drive_ls() %>% 
-  filter(name == "PredictorPortsFull.csv") %>% 
-  drive_download(path = "temp/PredictorPortsFullOld.csv", overwrite = TRUE)
+  filter(name == SUBDIR) %>% drive_ls() %>% 
+  filter(name == FILENAME) %>% 
+  drive_download(path = paste0("temp/",FILENAME), overwrite = TRUE)
 
-# Download data
-old_PredictorPortsFull <- fread("temp/PredictorPortsFullOld.csv")
+# import
+if (grepl('.csv',FILENAME)){
+  old_PredictorPortsFull <- fread(paste0("temp/",FILENAME))
+} else{
+  unzip(zipfile = paste0('temp/',FILENAME), exdir = 'temp')
+  old_PredictorPortsFull <- fread(
+    paste0("temp/",substr(FILENAME, 1,(nchar(FILENAME)-4)),'.csv')
+  )
+}
 
-# Get id of new PredictorPortsFull
-id <-  NEW_PATH_RELEASES %>% drive_ls() %>% 
+# download new data
+id <-  NEW_PATH_RELEASES %>% drive_ls() %>%
   filter(name == "Portfolios") %>% drive_ls() %>% 
-  filter(name == "Full Sets OP") %>% drive_ls() %>% 
-  filter(name == "PredictorPortsFull.csv") %>% 
-  drive_download(path = "temp/PredictorPortsFullNew.csv", overwrite = TRUE)
+  filter(name == SUBDIR) %>% drive_ls() %>% 
+  filter(name == FILENAME) %>% 
+  drive_download(path = paste0("temp/",FILENAME), overwrite = TRUE)
 
-# Download data
-new_PredictorPortsFull <- fread("temp/PredictorPortsFullNew.csv")
+# import
+if (grepl('.csv',FILENAME)){
+  new_PredictorPortsFull <- fread(paste0("temp/",FILENAME))
+} else{
+  unzip(zipfile = paste0('temp/',FILENAME), exdir = 'temp')
+  new_PredictorPortsFull <- fread(
+    paste0("temp/",substr(FILENAME, 1,(nchar(FILENAME)-4)),'.csv')
+  )
+}
 
-# Get id of SignalDoc
-id <-  NEW_PATH_RELEASES %>% drive_ls() %>% 
+# download signal doc
+NEW_PATH_RELEASES %>% drive_ls() %>% 
   filter(name == "SignalDoc.csv") %>% 
   drive_download(path = "temp/SignalDoc.csv", overwrite = TRUE)
 
@@ -53,20 +74,18 @@ SignalDoc <- fread("temp/SignalDoc.csv")
 # Mutate dataframes and join                                      ====
 #=====================================================================#
 
-# Drop unwanted variables
-old_PredictorPortsFull <- old_PredictorPortsFull %>% 
-  select(-signallag, -Nlong, -Nshort) %>% 
-  rename(old_ret = ret)
-
-# Drop unwanted variables
-new_PredictorPortsFull <- new_PredictorPortsFull %>% 
-  select(-signallag, -Nlong, -Nshort) %>% 
-  rename(new_ret = ret)
-
 # Join and keep observations that match
 PredictorPortsFull <- inner_join(
-  old_PredictorPortsFull, new_PredictorPortsFull,
-  by = c("signalname", "port", "date"))
+  old_PredictorPortsFull %>% 
+    select(-signallag, -Nlong, -Nshort) %>% 
+    rename(old_ret = ret) %>% 
+    mutate(port = if_else(nchar(port)==2, port, paste0('0',port)))
+  , new_PredictorPortsFull %>% 
+    select(-signallag, -Nlong, -Nshort) %>% 
+    rename(new_ret = ret) %>% 
+    mutate(port = if_else(nchar(port)==2, port, paste0('0',port)))
+  , by = c("signalname", "port", "date")
+  )
 
 # Keep only relevant variables
 SignalDoc <- SignalDoc %>% 
@@ -91,12 +110,33 @@ PredictorPortsFull <- inner_join(
 #=====================================================================#
 
 # Regression by group. New returns on old returns
-check <- PredictorPortsFull[, list(
+temp1 <- PredictorPortsFull[
+  !is.na(samptype)
+  , list(
   intercept = coef(lm(new_ret ~ old_ret))[1],
   slope = coef(lm(new_ret ~ old_ret))[2],
-  rsq = summary(lm(new_ret ~ old_ret))$r.squared*100
-  ),
-  by = c("signalname", "port", "samptype")]
+  rsq = summary(lm(new_ret ~ old_ret))$r.squared*100,
+  new_rbar = mean(new_ret), 
+  old_rbar = mean(old_ret)
+  )
+  , by = c("signalname", "port", "samptype")
+  ]
+
+temp2 = PredictorPortsFull[
+  year(date) >= SampleStartYear
+  , list(
+  intercept = coef(lm(new_ret ~ old_ret))[1],
+  slope = coef(lm(new_ret ~ old_ret))[2],
+  rsq = summary(lm(new_ret ~ old_ret))$r.squared*100,
+  new_rbar = mean(new_ret), 
+  old_rbar = mean(old_ret)
+  )
+  , by = c("signalname", "port")
+  ] %>% 
+  mutate(samptype = 'full-samp')
+
+check = rbind(temp1,temp2) %>% arrange(signalname,port,samptype)
+
 
 # Export results
 write.csv(check, "temp/PredictorPortsCheck.csv", row.names = FALSE)
@@ -104,23 +144,25 @@ write.csv(check, "temp/PredictorPortsCheck.csv", row.names = FALSE)
 
 
 #=====================================================================#
-# Summary stats ====
+# Summary stats output to console ====
 #=====================================================================#
 
 check_ls = check %>% 
-  filter(port == 'LS', !is.na(samptype), !is.na(slope)) %>% 
-  mutate(rsq = rsq) 
+  filter(port == 'LS', !is.na(samptype), !is.na(slope)) 
+
+check_ls %>% 
+  filter(!is.na(samptype)) %>% 
+  summarize(
+    quantile(slope, 0.05),     quantile(rsq, 0.05)
+  )
 
 sumstat = check_ls %>% 
   group_by(samptype) %>% 
   summarize(
-    min = quantile(rsq, 0)
-    , p05 = quantile(rsq, 0.05)
+      p05 = quantile(rsq, 0.05)
+    , p10 = quantile(rsq, 0.10)
     , p25 = quantile(rsq, 0.25)
     , p50 = quantile(rsq, 0.50)
-    , p75 = quantile(rsq, 0.75)
-    , p95 = quantile(rsq, 0.95)
-    , max = quantile(rsq, 1)    
   ) %>% 
   as.data.frame()
 
@@ -128,18 +170,23 @@ print('Rsq from regressing new long-short OP returns on old')
 print(sumstat)
 
 check_ls %>% 
-  filter(samptype == 'in-samp', rsq < 95) %>% 
-  arrange(rsq)
+  filter(rsq < 98.4) %>% 
+  arrange(samptype, rsq) %>% 
+  mutate(
+    dret = new_rbar - old_rbar
+  ) %>% 
+  group_by(samptype) %>% 
+  summarize(
+    mean(abs(dret))
+  )
   
-check_ls %>% 
-  filter(samptype == 'post-pub', rsq < 95) %>% 
-  arrange(rsq)
+  
 
-# COMPARE ONE ====
-signalselect = 'Price'
+# Examine one signal in detail ====
+signalselect = 'Accruals'
 
 plotme = PredictorPortsFull %>% 
-  filter(signalname == signalselect , port == 'LS') %>% 
+  filter(signalname == signalselect , port == '02') %>% 
   select(date, old_ret, new_ret) %>% 
   pivot_longer(
     c(old_ret, new_ret), names_to = 'vintage', values_to = 'ret'
@@ -161,19 +208,9 @@ p2 = plotme %>%
   geom_line() + 
   theme_minimal()
 
-library(gridExtra)
-
 grid.arrange(p1,p2,nrow = 1)
 
-check_ls %>% 
-  filter(signalname == signalselect)
-
-
-
-# yearbegin = 1990
-# yearend   = 2020  
-# plotme %>%  
-#   filter(year(date) >= yearbegin, year(date) <= yearend) %>%   
-#   ggplot(aes(x=date, y = ret, group = vintage, color = vintage)) +
-#   geom_line() + 
-#   theme_minimal()
+check %>% 
+  filter(signalname == signalselect) %>% 
+  arrange(samptype, port) %>% 
+  filter(!is.na(samptype))
