@@ -1,6 +1,6 @@
 # 2021 12 Andrew Chen: replicate the main result of McLean-Pontiff 
 
-# ==== ENVIRONMENT ====
+# ENVIRONMENT ====
 
 rm(list = ls())
 library(tidyverse)
@@ -12,10 +12,8 @@ library(lubridate)
 
 ### USER ENTRY
 
-# root of April 2021 release on Gdrive
-pathRelease = 'https://drive.google.com/drive/folders/1I6nMmo8k_zGCcp9tUvmMedKTAkb9734R'
-url_prefix = 'https://drive.google.com/uc?export=download&id='
-
+# root of March 2022 release
+pathRelease = 'https://drive.google.com/drive/folders/1O18scg9iBTiBaDiQFhoGxdn4FdsbMqGo'
 
 # login to gdrive
 # this prompts a login
@@ -24,18 +22,15 @@ pathRelease %>% drive_ls()
 # create temporary directory 
 dir.create('temp/')
 
-# ==== DOWNLOAD DATA =====
+# DOWNLOAD DATA =====
 
 ## download signal documentation and show user
 target_dribble = pathRelease %>% drive_ls() %>% 
-  filter(name=='SignalDocumentation.xlsx')
+  filter(name=='SignalDoc.csv')
 
-drive_download(target_dribble, path = 'temp/deleteme.xlsx', overwrite = T)
+drive_download(target_dribble, path = 'temp/deleteme.csv', overwrite = T)
 
-signaldoc = left_join(
-  read_excel('temp/deleteme.xlsx',sheet = 'BasicInfo')  
-  , read_excel('temp/deleteme.xlsx',sheet = 'AddInfo')
-) %>% 
+signaldoc = fread('temp/deleteme.csv') %>% 
   mutate(
     signalname = Acronym
     , pubdate = as.Date(paste0(Year, '-12-31'))
@@ -58,7 +53,7 @@ ret0 = fread('temp/deleteme.csv') %>%
   filter(!is.na(ret)) 
 
 
-# ==== MERGE AND FIND OUT OF SAMPLE RETURNS ====
+# MERGE AND FIND OUT OF SAMPLE RETURNS ====
 ret1 = ret0 %>% 
   left_join(signaldoc) %>% 
   mutate(
@@ -85,11 +80,10 @@ signalok = sumsignal %>%
   transmute(signalname)
 sumsignal = sumsignal %>% inner_join(signalok)
 
-# ==== check out of sample decay simple way ====
+# check out of sample decay simple way ====
 sumsamp = sumsignal %>% 
   group_by(samptype) %>% 
-  summarize(rbar = mean(rbar))
-
+  summarize(rbar = mean(rbar), nsignal = n())
 
 
 baseline = sumsamp %>% filter(samptype == 'in-samp') %>% select(rbar) %>% as.numeric()
@@ -99,11 +93,10 @@ sumsamp = sumsamp %>%
     decay = (baseline - rbar)/baseline
   )
 
-
 sumsamp
 
 
-# ==== BOOTSTRAP MEAN DISTRIBUTIONS ====
+# BOOTSTRAP MEAN DISTRIBUTIONS ====
 # clustered by month
 
 set.seed(6)

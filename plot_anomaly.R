@@ -14,15 +14,16 @@ library(lubridate)
 ### USER ENTRY
 # first signal will be the focus
 # use 'mkt_rf' to compare with market excess return (CRSPVW)
-signallist = c('PS','mkt_rf')
+signallist = c('TrendFactor','mkt_rf')
 # signallist = c('IndIPO','CompEquIss','ShareIss1Y')
 years_presamp = 15 # for x axis limits
 
 
 # root of April 2021 release on Gdrive
-pathRelease = 'https://drive.google.com/drive/folders/1I6nMmo8k_zGCcp9tUvmMedKTAkb9734R'
-url_prefix = 'https://drive.google.com/uc?export=download&id='
+# pathRelease = 'https://drive.google.com/drive/folders/1I6nMmo8k_zGCcp9tUvmMedKTAkb9734R'
 
+# root of March 2022 release on Gdrive
+pathRelease = 'https://drive.google.com/drive/folders/1O18scg9iBTiBaDiQFhoGxdn4FdsbMqGo'
 
 # login to gdrive
 # this prompts a login
@@ -32,21 +33,37 @@ pathRelease %>% drive_ls()
 # ==== DOWNLOAD DATA =====
 
 ## download signal documentation and show user
+#   first try xlsx
 target_dribble = pathRelease %>% drive_ls() %>% 
   filter(name=='SignalDocumentation.xlsx')
 
-drive_download(target_dribble, path = 'temp/deleteme.xlsx', overwrite = T)
+if (nrow(target_dribble) > 0){
+  drive_download(target_dribble, path = 'temp/deleteme.xlsx', overwrite = T)
+  
+  signaldoc = left_join(
+    read_excel('temp/deleteme.xlsx',sheet = 'BasicInfo')  
+    , read_excel('temp/deleteme.xlsx',sheet = 'AddInfo')
+  ) 
+  
+} else {
+  #   then try csv (used as of March 2021)
+  target_dribble = pathRelease %>% drive_ls() %>% 
+    filter(name=='SignalDoc.csv')
+  
+  drive_download(target_dribble, path = 'temp/deleteme.csv', overwrite = T)
+  
+  signaldoc = fread('temp/deleteme.csv')
+    
+} # end if nrow(target_dribble)
 
-signaldoc = left_join(
-  read_excel('temp/deleteme.xlsx',sheet = 'BasicInfo')  
-  , read_excel('temp/deleteme.xlsx',sheet = 'AddInfo')
-) %>% 
+signaldoc = signaldoc %>% 
   mutate(
     signalname = Acronym
     , pubdate = as.Date(paste0(Year, '-12-31'))
     , sampend = as.Date(paste0(SampleEndYear, '-12-31'))
   ) %>% 
   arrange(signalname)
+
 
 print('Here are some signals you can choose from')
 signaldoc %>% select(signalname,Authors,LongDescription) %>% print(n=20)
@@ -136,3 +153,11 @@ ggplot(plotme, aes(x=date,y=cret)) +
 
 ggsave('temp/plot_anomaly.png', width = 6, height = 4)
 
+# ==== SUMMARY STATS ====
+
+
+# check summary stats
+port %>% 
+  group_by(signalname) %>% 
+  summarize( mean(ret, na.rm=T), sd(ret, na.rm=T), n(), na.rm=T ) %>% 
+  print(n=100)

@@ -24,9 +24,12 @@ library(fst)
 library(getPass)
 library(RPostgres)
 
-# root of April 2021 release on Gdrive
-pathRelease = 'https://drive.google.com/drive/folders/1I6nMmo8k_zGCcp9tUvmMedKTAkb9734R'
-url_prefix = 'https://drive.google.com/uc?export=download&id='
+  # root of April 2021 release on Gdrive
+  # pathRelease = 'https://drive.google.com/drive/folders/1I6nMmo8k_zGCcp9tUvmMedKTAkb9734R'
+
+# root of March 2022 release on Gdrive
+pathRelease = 'https://drive.google.com/drive/u/0/folders/1O18scg9iBTiBaDiQFhoGxdn4FdsbMqGo'
+
 
 # ## LOGIN TO WRDS
 user = getPass('wrds username: ')
@@ -99,7 +102,7 @@ crspm2 = crspm %>%
       , 0
       , dlret
     )
-    , ret = ret + dlret
+    , ret = (1+ret)*(1+dlret)-1
     , ret = ifelse(
       is.na(ret) & ( dlret != 0)
       , dlret
@@ -157,21 +160,13 @@ fwrite(
   , row.names = F
 )
 
-
-# ==== DOWNLOAD SIGNAL DOC ====
-## download signal documentation and show user
-target_dribble = pathRelease %>% drive_ls() %>% 
-  filter(name=='SignalDocumentation.xlsx')
-
-drive_download(target_dribble, path = 'temp/SignalDocumentation.xlsx', overwrite = T)
-
-
-Sys.time() - tic
-
+gc() # clean up ram
 
 # ==== SUMMARIZE WHAT YOU GOT ====
 
 # copied from CrossSection/Shipping/Code/3_check_storage.r
+
+## broad overview ====
 obs = signalwide %>%
   select(-permno) %>%
   group_by(yyyymm) %>%
@@ -195,4 +190,21 @@ print('In temp/signal_predictors_all_wide.csv you have the following signals')
 widesum %>% setDT()
 widesum
 
+## overview of recent data ====
 
+datelist = unique(signalwide$yyyymm) %>% sort(decreasing = T)
+datelist = datelist[1:24]
+
+
+recent_nobs = signalwide %>% 
+  select(-permno) %>% 
+  filter(yyyymm %in% datelist) %>% 
+  group_by(yyyymm) %>% 
+  summarize_all(funs(sum(!is.na(.)))) %>% 
+  t()
+
+
+print('Number of firms with data in recent months')
+print(recent_nobs[1:10 , 1:12])
+print('...')
+print(recent_nobs[c(1, nrow(recent_nobs) - 0:10), 1:12])
