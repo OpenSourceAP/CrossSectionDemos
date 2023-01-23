@@ -30,6 +30,8 @@ library(RPostgres)
 # root of March 2022 release on Gdrive
 pathRelease = 'https://drive.google.com/drive/u/0/folders/1O18scg9iBTiBaDiQFhoGxdn4FdsbMqGo'
 
+# output path
+outpath = 'temp/'
 
 # ## LOGIN TO WRDS
 user = getPass('wrds username: ')
@@ -47,7 +49,7 @@ wrds <- dbConnect(Postgres(),
 # this prompts a login
 pathRelease %>% drive_ls()
 
-dir.create('temp/')
+dir.create(outpath)
 
 # ==== DOWNLOAD AND PROCESS MONTHLY CRSP STUFF ====
 
@@ -138,12 +140,12 @@ target_dribble = pathRelease %>% drive_ls() %>%
     filter(name == 'Firm Level Characteristics') %>% drive_ls() %>% 
     filter(name == 'Full Sets') %>% drive_ls() %>% 
     filter(name == 'signed_predictors_dl_wide.zip') 
-dl = drive_download(target_dribble, path = 'temp/deleteme.zip', overwrite = T)
+dl = drive_download(target_dribble, path = paste0(outpath,'deleteme.zip'), overwrite = T)
 
 # unzip, read, clean up
-unzip('temp/deleteme.zip', exdir = 'temp')
-wide_dl_raw = fread('temp/signed_predictors_dl_wide.csv')
-file.remove('temp/signed_predictors_dl_wide.csv')
+unzip(paste0(outpath,'deleteme.zip'), exdir = gsub('/$', '', outpath))
+wide_dl_raw = fread(paste0(outpath, 'signed_predictors_dl_wide.csv'))
+file.remove(paste0(outpath, 'signed_predictors_dl_wide.csv'))
 
 # ==== MERGE AND EXPORT CSV ====
 
@@ -156,7 +158,7 @@ signalwide = full_join(
 
 fwrite(
   signalwide
-  , file = 'temp/signed_predictors_all_wide.csv'
+  , file = paste0(outpath, 'signed_predictors_all_wide.csv')
   , row.names = F
 )
 
@@ -186,9 +188,12 @@ widesum = obs %>% pivot_longer(
   ) %>% as.data.frame()
 
 
-print('In temp/signal_predictors_all_wide.csv you have the following signals')
+print(paste0(
+  'In ', outpath, 'signal_predictors_all_wide.csv you have the following signals'
+))
+
 widesum %>% setDT()
-widesum
+widesum %>% print(topn = 10)
 
 ## overview of recent data ====
 
