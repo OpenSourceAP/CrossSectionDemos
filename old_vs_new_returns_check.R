@@ -11,10 +11,12 @@ library(googledrive)
 library(gridExtra)
 
 dir.create('temp/')
+ 
+# root of March 2022 release
+OLD_PATH_RELEASES = 'https://drive.google.com/drive/folders/1O18scg9iBTiBaDiQFhoGxdn4FdsbMqGo'
 
-# Global constants
-OLD_PATH_RELEASES <- "https://drive.google.com/drive/folders/1I6nMmo8k_zGCcp9tUvmMedKTAkb9734R"
-NEW_PATH_RELEASES <- "https://drive.google.com/drive/folders/1O18scg9iBTiBaDiQFhoGxdn4FdsbMqGo"
+# root of August 2023 
+NEW_PATH_RELEASES = 'https://drive.google.com/drive/u/0/folders/1EP6oEabyZRamveGNyzYU0u6qJ-N43Qfq'
 
 # use this for original papers
 SUBDIR = 'Full Sets OP'; FILENAME = 'PredictorPortsFull.csv'
@@ -177,35 +179,52 @@ check_ls %>%
   ) %>% 
   group_by(samptype) %>% 
   summarize(
-    mean(abs(dret))
+    mean(abs(dret)), mean(dret)
   )
   
   
 
-# Examine one signal in detail ====
-signalselect = 'Accruals'
+#=====================================================================#
+# Check low Rsq ====
+#=====================================================================#
+
+
+check_ls %>% 
+  select(signalname, samptype, rsq, new_rbar, old_rbar) %>% 
+  filter(samptype == 'full-samp') %>% 
+  arrange(rsq) %>% 
+  head(20)
+  
+
+
+#=====================================================================#
+# Check selected signal ====
+#=====================================================================#
+signalselect = 'ProbInformedTrading'
 
 plotme = PredictorPortsFull %>% 
-  filter(signalname == signalselect , port == '02') %>% 
+  filter(signalname == signalselect , port == 'LS') %>% 
   select(date, old_ret, new_ret) %>% 
   pivot_longer(
     c(old_ret, new_ret), names_to = 'vintage', values_to = 'ret'
   ) 
 
-yearbegin = 1990
+yearbegin = 2000
 yearend   = yearbegin + 5
 p1 = plotme %>%  
   filter(year(date) >= yearbegin, year(date) <= yearend) %>%   
-  ggplot(aes(x=date, y = ret, group = vintage, color = vintage)) +
-  geom_line() + 
+  ggplot(aes(x=date, y = ret, group = vintage
+             , color = vintage, linetype = vintage)) +
+  geom_line(size = 1) + 
   theme_minimal() 
 
 yearbegin = 2015
 yearend   = yearbegin + 5
 p2 = plotme %>%  
   filter(year(date) >= yearbegin, year(date) <= yearend) %>%   
-  ggplot(aes(x=date, y = ret, group = vintage, color = vintage)) +
-  geom_line() + 
+  ggplot(aes(x=date, y = ret, group = vintage
+             , color = vintage, linetype = vintage)) +
+  geom_line(size = 1) + 
   theme_minimal()
 
 grid.arrange(p1,p2,nrow = 1)
