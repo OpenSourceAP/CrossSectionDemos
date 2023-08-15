@@ -15,6 +15,9 @@ library(lubridate)
 # root of March 2022 release
 pathRelease = 'https://drive.google.com/drive/folders/1O18scg9iBTiBaDiQFhoGxdn4FdsbMqGo'
 
+# root of August 2023 
+pathRelease = 'https://drive.google.com/drive/u/0/folders/1EP6oEabyZRamveGNyzYU0u6qJ-N43Qfq'
+
 # login to gdrive
 # this prompts a login
 pathRelease %>% drive_ls()
@@ -101,15 +104,16 @@ sumsamp
 
 set.seed(6)
 
-nboot = 500
+nboot = 200
 
 bootfun = function(sampname){
 
   # make wide dataset, use NA if not correct sample
   wide_is = ret1 %>%
     filter(samptype == sampname) %>% 
+    select(signalname, date, ret) %>% 
     pivot_wider(
-      c(date, ret, signalname), names_from = signalname, values_from = ret
+      names_from = signalname, values_from = ret
     ) %>% 
     select(-date) %>% 
     as.matrix()
@@ -117,12 +121,12 @@ bootfun = function(sampname){
   # make array that only has enough signals in each month (10)
   tgood = rowSums(!is.na(wide_is), na.rm=T) > 10
   mat = wide_is[tgood, ]
-  T = dim(mat)[1]
+  nmonth = dim(mat)[1]
   
   # bootstrap pooled mean
   rboot = rep(NA_real_, nboot)
   for (i in 1:nboot){
-    tempt = sample(1:T, replace = T)
+    tempt = sample(1:nmonth, replace = T)
     rboot[i] = mat[tempt,]  %>% as.vector %>% mean(na.rm=T)
   }
   
