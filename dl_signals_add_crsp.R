@@ -27,8 +27,11 @@ library(RPostgres)
   # root of April 2021 release on Gdrive
   # pathRelease = 'https://drive.google.com/drive/folders/1I6nMmo8k_zGCcp9tUvmMedKTAkb9734R'
 
-# root of March 2022 release on Gdrive
-pathRelease = 'https://drive.google.com/drive/u/0/folders/1O18scg9iBTiBaDiQFhoGxdn4FdsbMqGo'
+  # root of March 2022 release on Gdrive
+  pathRelease = 'https://drive.google.com/drive/u/0/folders/1O18scg9iBTiBaDiQFhoGxdn4FdsbMqGo'
+
+# root of August 2023 release on Gdrive
+pathRelease = 'https://drive.google.com/drive/u/0/folders/1EP6oEabyZRamveGNyzYU0u6qJ-N43Qfq'
 
 # output path
 outpath = 'temp/'
