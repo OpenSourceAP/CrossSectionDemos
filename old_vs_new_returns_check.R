@@ -12,11 +12,11 @@ library(gridExtra)
 
 dir.create('temp/')
  
-# root of March 2022 release
-OLD_PATH_RELEASES = 'https://drive.google.com/drive/folders/1O18scg9iBTiBaDiQFhoGxdn4FdsbMqGo'
+# root of August 2023 release
+OLD_PATH_RELEASES = 'https://drive.google.com/drive/folders/1EP6oEabyZRamveGNyzYU0u6qJ-N43Qfq'
 
-# root of August 2023 
-NEW_PATH_RELEASES = 'https://drive.google.com/drive/u/0/folders/1EP6oEabyZRamveGNyzYU0u6qJ-N43Qfq'
+# root of August 2024
+NEW_PATH_RELEASES = 'https://drive.google.com/drive/folders/1-PqsR-tOjv3-U9DRHw85X-VznYlu-Sfc'
 
 # use this for original papers
 SUBDIR = 'Full Sets OP'; FILENAME = 'PredictorPortsFull.csv'
@@ -165,11 +165,12 @@ sumstat = check_ls %>%
     , p10 = quantile(rsq, 0.10)
     , p25 = quantile(rsq, 0.25)
     , p50 = quantile(rsq, 0.50)
+    , p75 = quantile(rsq, 0.75)
+    , p90 = quantile(rsq, 0.90)
+    , p95 = quantile(rsq, 0.95)
   ) %>% 
   as.data.frame()
 
-print('Rsq from regressing new long-short OP returns on old')
-print(sumstat)
 
 check_ls %>% 
   filter(rsq < 98.4) %>% 
@@ -181,7 +182,48 @@ check_ls %>%
   summarize(
     mean(abs(dret)), mean(dret)
   )
+
+
+#=====================================================================#
+# Nicely formatted table to console ====
+#=====================================================================#
+
+print('Rsq from regressing new long-short OP returns on old')
+print(sumstat)
+
+# Print sumstat in a nicely formatted table
+library(knitr)
+library(kableExtra)
+
+sumstat_formatted <- sumstat %>%
+  mutate(across(where(is.numeric), ~ round(., 2)))
+
+print('R-squared from regressing new long-short OP returns on old:')
+kable(sumstat_formatted, format = "pipe", align = "lrrrr", caption = "Cross-Predictor Distribution of R-sq from Regressing New Returns on Old Returns") %>%
+  kable_styling(full_width = FALSE) %>%
+  print()
+
+
+#=====================================================================#
+# Plot summaries ====
+#=====================================================================#
   
+# Histogram of Rsq 
+ggplot(check_ls, aes(x = rsq, fill = samptype)) +
+  geom_histogram(bins = seq(0), alpha = 0.5, position = "identity") +
+  labs(title = "Histogram of R-squared by Sample Type", x = "R-squared", y = "Frequency") +
+  theme_minimal(base_size = 24) +
+  theme(
+    axis.text = element_text(size = 20),
+    axis.title = element_text(size = 22),
+    legend.text = element_text(size = 20),
+    legend.title = element_text(size = 22),
+    plot.title = element_text(size = 26)
+  )
+
+
+
+
   
 
 #=====================================================================#
