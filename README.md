@@ -1,27 +1,38 @@
 # CrossSectionDemos
 
-Example code of simple things one can do with [Open Source Asset Pricing data](www.openassetpricing.com), created with our [open source code](https://github.com/OpenSourceAP/CrossSection).
+Example code of simple things one can do with [Open Source Asset Pricing data](https://www.openassetpricing.com), created with our [open source code](https://github.com/OpenSourceAP/CrossSection).
 
-Each file is an **independent script** that **automatically downloads** data from the internet. You just need the googledrive R package and a Google Drive account.
+Each file is an **independent R script** that downloads what it needs. OpenAP data come from the [OpenAP Hugging Face dataset](https://huggingface.co/datasets/OpenSourceAP/CrossSection) through the [OpenSourceAP.DownloadR](https://github.com/tomz23/OpenSourceAP.DownloadR) package. No account or token is needed, except for the two scripts that use CRSP data from WRDS.
+
+## Setup
+
+```r
+install.packages(c("tidyverse", "gridExtra", "knitr", "OpenSourceAP.DownloadR"))
+```
+
+The scripts need OpenSourceAP.DownloadR 0.2.0 or later, which reads from Hugging Face. Check with `packageVersion("OpenSourceAP.DownloadR")`.
+
+Scripts use the latest data release by default. To use another, change `OpenAP$new()` to e.g. `OpenAP$new('2024_10')`. Releases from 2020_05 through 2025_10 are available.
+
+The WRDS scripts read credentials from the environment variables `WRDS_USER` and `WRDS_PASS` or from `~/.pgpass`, and prompt otherwise.
 
 ## List of Scripts
 
 Scripts are listed from lightest / fastest (top) to heaviest / slowest (bottom).
 
-| File | Description |
-| --- | --- |
-| `plot_anomaly.R` | Downloads selected long-short returns and plots along with sample and publication dates  |
-| `openap_vs_frenchweb.R` | Downloads `BM` and `BMdec` portfolios and compares to Ken French's data |
-| `daily_covid_demo.R` | Downloads daily returns (all signals) and plots performance in March 2020 |  
-| `FF1993_style_implementation.R` | Downloads selected characteristic, constructs Fama-French 1993 style factor (building on 2x3 sort with Size), compares with Ken French's HML. (*2x3 implementations are part of our dataset as of March 2022*)|
-| `dl_signal_add_crsp.R` | Creates the data you need for machine learning stuff.  Downloads all downloadable predictor characteristics (1.5 gigs zipped), downloads CRSP signals from WRDS, merges, and saves to disk (5.6 gig csv). |
-|`mclean_pontiff_main.R`| Replicates the fact that returns are mostly there out-of-sample (McLean and Pontiff 2016) |
-|`old_vs_new_returns_check.R`| Compares returns from two different releases |
+| File                            | Description                                                                                                                         |
+| ------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| `plot_anomaly.R`                | Plots selected long-short returns along with sample end and publication dates                                                       |
+| `openap_vs_frenchweb.R`         | Compares `BM` and `BMdec` long-short returns to Ken French's value portfolios                                                       |
+| `mclean_pontiff_main.R`         | Replicates the fact that returns are mostly there out-of-sample (McLean and Pontiff 2016)                                           |
+| `correlation_demo.R`            | Correlations, principal components, and a dendrogram of long-short returns                                                          |
+| `make_pi_from_anomalies.R`      | Estimates $\pi$ from anomaly returns, using the CLT and the mean absolute deviation of the standard normal                          |
+| `old_vs_new_returns_check.R`    | Compares portfolio returns from two releases                                                                                        |
+| `daily_covid_demo.R`            | Plots daily long-short returns (all signals) during the March 2020 crash                                                            |
+| `ff1993_style_implementation.R` | Builds a Fama-French 1993 style factor from a firm characteristic and CRSP (**WRDS**), compares to Ken French's HML and the release |
+| `dl_signals_add_crsp.R`         | Creates the data for machine learning: all signed characteristics plus CRSP Price, Size, STreversal (**WRDS**, about 20 GB of RAM)  |
 
 ## Details
 
-- Assumes working directory is the same folder the file is in.
-- Creates folder `temp/` in working directory and puts output and intermediate files there
-- **Links to Google Drive URLs may need to be updated**
-  - For the March 2022 Release use https://drive.google.com/drive/folders/1O18scg9iBTiBaDiQFhoGxdn4FdsbMqGo
-  - For the April 2021 Release use https://drive.google.com/drive/folders/1I6nMmo8k_zGCcp9tUvmMedKTAkb9734R
+- Run each script from this folder, e.g. `Rscript plot_anomaly.R`.
+- Output and intermediate files go in `temp/`, which each script creates.
