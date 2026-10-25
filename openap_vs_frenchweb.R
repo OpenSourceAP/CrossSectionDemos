@@ -1,93 +1,64 @@
 # compare to Ken French's data
 # Andrew Chen 2021 04
+#
+# Run:     Rscript openap_vs_frenchweb.R  (from this folder)
+# Inputs:  OpenAP BM and BMdec long-short returns (via OpenSourceAP.DownloadR),
+#          Ken French's BE-ME portfolios and HML (downloaded)
+# Outputs: temp/openap_vs_french_close.png
 
 # ENVIRONMENT ====
 rm(list = ls())
 library(tidyverse)
-library(data.table)
-library(googledrive)
+library(OpenSourceAP.DownloadR)
 
-dir.create('temp/')
+### USER ENTRY
+datebegin = as.Date('2019-01-01') # plot runs from here to the end of the data
 
-# root of April 2021 release on Gdrive
-pathRelease = 'https://drive.google.com/drive/folders/1I6nMmo8k_zGCcp9tUvmMedKTAkb9734R'
-url_prefix = 'https://drive.google.com/uc?export=download&id='
+# latest release by default, or e.g. OpenAP$new('2024_10')
+openap = OpenAP$new()
 
+dir.create('temp', showWarnings = FALSE)
 
-# login to gdrive
-# this prompts a login
-pathRelease %>% drive_ls()
+# reads one block of monthly or daily data from a Ken French zip
+read_french = function(zipname, block = 1){
+  url = paste0('https://mba.tuck.dartmouth.edu/pages/faculty/ken.french/ftp/', zipname, '_CSV.zip')
+  zipfile = tempfile(fileext = '.zip')
+  download.file(url, zipfile, quiet = TRUE)
+  lines = readLines(unz(zipfile, unzip(zipfile, list = TRUE)$Name[1]))
+  is_data = grepl('^\\s*[0-9]{6,8}\\s*,', lines)
+  start = which(is_data & !c(FALSE, head(is_data, -1)))[block]
+  end = start + match(FALSE, is_data[start:length(lines)], nomatch = length(lines) - start + 2) - 2
+  read.csv(text = c(lines[start - 1], lines[start:end]), check.names = FALSE) %>%
+    rename(yyyymm = 1) %>%
+    as_tibble()
+}
 
 # DOWNLOAD AND PROCESS French data (ff) ====
-## download monthly
-ffweb = 'http://mba.tuck.dartmouth.edu/pages/faculty/ken.french/ftp/Portfolios_Formed_on_BE-ME_CSV.zip'
-download.file(ffweb,'temp/deleteme.zip')
-unzip('temp/deleteme.zip', exdir = 'temp')
 
-ffweb2 = 'http://mba.tuck.dartmouth.edu/pages/faculty/ken.french/ftp/F-F_Research_Data_Factors_CSV.zip'
-download.file(ffweb2,'temp/deleteme.zip')
-unzip('temp/deleteme.zip', exdir = 'temp')
+# BE-ME quintiles: block 1 is value weighted, block 2 is equal weighted
+ff1 = read_french('Portfolios_Formed_on_BE-ME', block = 2) %>%
+  transmute(yyyymm, ret = `Hi 20` - `Lo 20`, port = 'ff_ew5')
 
-# Equal Weight returns begin on line 1165 
-ff1 = read.csv('temp/Portfolios_Formed_on_BE-ME.csv', skip=1164, nrows = 2302 - 1164 - 1) %>% 
-  as_tibble() %>% 
-  mutate_all(funs(as.numeric)) %>% 
-  transmute(
-    yearm = X, ret = Hi.20 - Lo.20, port = 'ff_ew5'
-  )
+ff2 = read_french('Portfolios_Formed_on_BE-ME', block = 1) %>%
+  transmute(yyyymm, ret = `Hi 20` - `Lo 20`, port = 'ff_vw5')
 
-# VW returns
-ff2 = read.csv('temp/Portfolios_Formed_on_BE-ME.csv', skip=23, nrows = 1161 - 23 - 1) %>% 
-  as_tibble() %>% 
-  mutate_all(funs(as.numeric)) %>% 
-  transmute(
-    yearm = X, ret = Hi.20 - Lo.20, port = 'ff_vw5'
-  ) 
-
-# HML
-ff3 = read.csv('temp/F-F_Research_Data_Factors.csv', skip=3, nrows = 1141 - 3 - 1) %>% 
-  as_tibble() %>% 
-  mutate_all(funs(as.numeric)) %>% 
-  transmute(
-    yearm = X, ret = HML, port = 'ff_hml'
-  )
+ff3 = read_french('F-F_Research_Data_Factors') %>%
+  transmute(yyyymm, ret = HML, port = 'ff_hml')
 
 ff = rbind(ff1,ff2,ff3)
 
 # DOWNLOAD AND PROCESS OPENAP DATA (cz)====
 
-# download
-signallist = c('BM','BMdec')
-csvlist = signallist %>% paste0('.csv')
-target_dribble = pathRelease %>% drive_ls() %>% 
-  filter(name=='Portfolios') %>%  drive_ls() %>% 
-  filter(name=='Individual') %>%  drive_ls() %>% 
-  filter(name=='Original_Cuts') %>%  drive_ls() %>% 
-  filter(
-    name %in% csvlist
-  )
-
-port = tibble()
-for (i in 1:length(csvlist)){
-  drive_download(target_dribble[i,], path = 'temp/temp.csv', overwrite = T)
-  port = rbind(
-    port
-    ,fread('temp/temp.csv') %>% 
-      transmute(date, ret = portLS, signalname = signallist[i])
-  )
-} 
-
-cz = port %>% 
+cz = openap$dl_port('op', c('BM','BMdec')) %>%
+  filter(port == 'LS') %>%
   transmute(
-    yearm = year(as.Date(date))*100 + month(as.Date(date))
+    yyyymm = year(date)*100 + month(date)
     , ret
     , port = signalname
-  ) %>% 
-  as_tibble()
-
+  )
 
 # MERGE AND CHECK ====
-both = rbind(ff,cz) 
+both = rbind(ff,cz)
 
 
 info = data.frame(
@@ -98,44 +69,43 @@ info = data.frame(
   , rank      = c(3,4,5,1,2)
 ) %>% arrange(rank)
 
-plotme = both %>% 
+plotme = both %>%
   mutate(
-    date = as.Date(as.character(yearm*100+28), '%Y%m%d')
-  ) %>% 
+    date = as.Date(as.character(yyyymm*100+28), '%Y%m%d')
+  ) %>%
   mutate(
     port = factor(port, levels = info$levels, labels = info$labels)
-  )  
+  )
 
-# plot 
-datebegin = as.Date('2019-01-01')
+# plot through the last month that all series have
+dateend = plotme %>% group_by(port) %>% summarize(d = max(date)) %>% pull(d) %>% min()
+
 ggplot(
-  plotme %>% 
-    filter(date >= datebegin, date <= '2020-12-31') %>% 
-    group_by(port) %>% arrange(date) %>% 
+  plotme %>%
+    filter(date >= datebegin, date <= dateend) %>%
+    group_by(port) %>% arrange(date) %>%
     mutate(
       ret = if_else(abs(date - datebegin) <= 31 , 0, ret)
       , cret = 100*(cumprod(1+ret/100) - 1)
     )
   , aes(x=date, y=cret, group=port)) +
-  geom_line(aes(linetype = port, color = port), size = 0.75) +
+  geom_line(aes(linetype = port, color = port), linewidth = 0.75) +
   ylab('Cumulative Return on Value (%)')+
+  xlab('') +
   ggtitle('Open Asset Pricing vs Ken French') +
   theme_minimal(base_size = 18) +
   theme(
     legend.title = element_blank()
-    , legend.position = c(0.25, 0.25)
-    , legend.background = element_rect(fill='white')
+    , legend.position = 'bottom'
   )  +
+  guides(color = guide_legend(ncol = 2), linetype = guide_legend(ncol = 2)) +
   scale_color_manual(
     breaks = info$labels
     , values= info$colors
   ) +
   scale_linetype_manual(
-    values = info$linetypes
-  ) 
+    breaks = info$labels
+    , values = info$linetypes
+  )
 
-temp = 1
-ggsave(filename = paste0("temp/openap_vs_french_close.png")
-       , width = 10*temp, height = 6*temp)
-
-
+ggsave(filename = "temp/openap_vs_french_close.png", width = 10, height = 6, bg = 'white')

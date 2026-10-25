@@ -1,16 +1,16 @@
 # Andrew 2020 04
-
-# creates what you need to do machine learning style stuff
-# downloads downloadable wide signals
-# downloads crsp predictors
-# merges together and outputs
-
-# takes about 5 minutes
-
-# creates:
-#   temp/signed_predictors_all_wide.csv
-#   temp/SignalDocumentation.xlsx
-
+#
+# creates what you need to do machine learning style stuff:
+# all signed firm characteristics in the release, plus the CRSP signals
+# Price, Size, and STreversal (signed), merged into one wide panel.
+# Needs a lot of RAM (about 20 GB) and a WRDS account.
+#
+# Run:     Rscript dl_signals_add_crsp.R  (from this folder)
+#          WRDS credentials come from WRDS_USER / WRDS_PASS, ~/.pgpass, or a prompt
+# Inputs:  OpenAP signed firm characteristics (via OpenSourceAP.DownloadR),
+#          CRSP CIZ monthly stock file (crsp.msf_v2, WRDS, via the same package)
+# Outputs: temp/signed_predictors_all_wide.parquet, temp/SignalDoc.csv,
+#          coverage summaries to console
 
 
 # ==== ENVIRONMENT ====
@@ -18,164 +18,33 @@ rm(list = ls())
 tic = Sys.time()
 
 library(tidyverse)
-library(googledrive)
-library(data.table)
-library(fst)
-library(getPass)
-library(RPostgres)
+library(nanoparquet)
+library(OpenSourceAP.DownloadR)
 
-  # root of April 2021 release on Gdrive
-  # pathRelease = 'https://drive.google.com/drive/folders/1I6nMmo8k_zGCcp9tUvmMedKTAkb9734R'
-
-  # root of March 2022 release on Gdrive
-  # pathRelease = 'https://drive.google.com/drive/u/0/folders/1O18scg9iBTiBaDiQFhoGxdn4FdsbMqGo'
-
-# root of August 2023 release on Gdrive
-pathRelease = 'https://drive.google.com/drive/u/0/folders/1EP6oEabyZRamveGNyzYU0u6qJ-N43Qfq'
+# latest release by default, or e.g. OpenAP$new('2024_10')
+openap = OpenAP$new()
 
 # output path
 outpath = 'temp/'
+dir.create(outpath, showWarnings = FALSE)
 
-# ## LOGIN TO WRDS
-user = getPass('wrds username: ')
-pass = getPass('wrds password: ')
+# ==== DOWNLOAD ====
 
-wrds <- dbConnect(Postgres(),
-                  host='wrds-pgdata.wharton.upenn.edu',
-                  port=9737,
-                  dbname='wrds',
-                  user=user,
-                  password=pass,
-                  sslmode='require')
+# signed so that high values predict high returns, including the CRSP signals
+signalwide = openap$dl_all_signals(signed = TRUE)
 
-# login to gdrive
-# this prompts a login
-pathRelease %>% drive_ls()
+write_parquet(signalwide, paste0(outpath, 'signed_predictors_all_wide.parquet'))
+write.csv(openap$dl_signal_doc(), paste0(outpath, 'SignalDoc.csv'), row.names = FALSE)
 
-dir.create(outpath)
-
-# ==== DOWNLOAD AND PROCESS MONTHLY CRSP STUFF ====
-
-
-# CRSP monthly
-# Follows in part: https://wrds-www.wharton.upenn.edu/pages/support/research-wrds/macros/wrds-macro-crspmerge/
-crspm = dbSendQuery(conn = wrds, statement =
-                      "select a.permno, a.date, a.ret, a.shrout, a.prc, 
-                     b.exchcd,
-                     c.dlstcd, c.dlret                                -- from delistings table
-                     from crsp.msf as a
-                     left join crsp.msenames as b
-                     on a.permno=b.permno
-                     and b.namedt<=a.date
-                     and a.date<=b.nameendt
-                     left join crsp.msedelist as c
-                     on a.permno=c.permno
-                     and date_trunc('month', a.date) = date_trunc('month', c.dlstdt)
-                     "
-) %>%
-  # Pull data
-  dbFetch(n = -1) %>%
-  setDT()
-
-
-# incorporate delisting return
-# GHZ cite Johnson and Zhao (2007), Shumway and Warther (1999)
-# but the way HXZ does this might be a bit better
-crspm2 = crspm %>%
-  mutate(
-    dlret = ifelse(
-      is.na(dlret)
-      & (dlstcd == 500 | (dlstcd >=520 & dlstcd <=584))
-      & (exchcd == 1 | exchcd == 2)
-      , -0.35
-      , dlret
-    )
-    , dlret = ifelse(
-      is.na(dlret)
-      & (dlstcd == 500 | (dlstcd >=520 & dlstcd <=584))
-      & (exchcd == 3)
-      , -0.55
-      , dlret
-    )
-    , dlret = ifelse(
-      dlret < -1 & !is.na(dlret)
-      , -1
-      , dlret
-    )
-    , dlret = ifelse(
-      is.na(dlret)
-      , 0
-      , dlret
-    )
-    , ret = (1+ret)*(1+dlret)-1
-    , ret = ifelse(
-      is.na(ret) & ( dlret != 0)
-      , dlret
-      , ret
-    )
-  )
-
-# convert ret to pct, other formatting
-crspm2 = crspm2 %>%
-  mutate(
-    ret = 100*ret
-    , date = as.Date(date)
-    , me = abs(prc) * shrout
-    , yyyymm = year(date) * 100 + month(date)
-  )
-
-
-# NOTE THESE ARE SIGNED!
-crspmsignal = crspm2 %>% 
-  transmute(
-    permno
-    , yyyymm
-    , STreversal = -1*if_else(is.na(ret), 0, ret)
-    , Price = -1*log(abs(prc))
-    , Size = -1*log(me)
-  ) 
-
-# ==== DOWNLOAD AND READ IN BIG ZIP ====
-# 2 gig dl, can take a few minutes
-
-# download
-target_dribble = pathRelease %>% drive_ls() %>% 
-    filter(name == 'Firm Level Characteristics') %>% drive_ls() %>% 
-    filter(name == 'Full Sets') %>% drive_ls() %>% 
-    filter(name == 'signed_predictors_dl_wide.zip') 
-dl = drive_download(target_dribble, path = paste0(outpath,'deleteme.zip'), overwrite = T)
-
-# unzip, read, clean up
-unzip(paste0(outpath,'deleteme.zip'), exdir = gsub('/$', '', outpath))
-wide_dl_raw = fread(paste0(outpath, 'signed_predictors_dl_wide.csv'))
-file.remove(paste0(outpath, 'signed_predictors_dl_wide.csv'))
-
-# ==== MERGE AND EXPORT CSV ====
-
-signalwide = full_join(
-  wide_dl_raw
-  , crspmsignal
-  , by = c('permno','yyyymm')
-)
-
-
-fwrite(
-  signalwide
-  , file = paste0(outpath, 'signed_predictors_all_wide.csv')
-  , row.names = F
-)
-
-gc() # clean up ram
+print(paste0('Download and save took ', round(difftime(Sys.time(), tic, units = 'mins'), 1), ' minutes'))
 
 # ==== SUMMARIZE WHAT YOU GOT ====
-
-# copied from CrossSection/Shipping/Code/3_check_storage.r
 
 ## broad overview ====
 obs = signalwide %>%
   select(-permno) %>%
   group_by(yyyymm) %>%
-  summarize_all(funs(sum(!is.na(.))))
+  summarize(across(everything(), ~ sum(!is.na(.x))))
 
 widesum = obs %>% pivot_longer(
   -yyyymm
@@ -188,31 +57,24 @@ widesum = obs %>% pivot_longer(
     date_begin = min(yyyymm)
     , date_end = max(yyyymm)
     , mean_firmobs_per_month = floor(mean(obs))
-  ) %>% as.data.frame()
-
+  )
 
 print(paste0(
-  'In ', outpath, 'signal_predictors_all_wide.csv you have the following signals'
+  'In ', outpath, 'signed_predictors_all_wide.parquet you have the following signals'
 ))
-
-widesum %>% setDT()
-widesum %>% print(topn = 10)
+print(widesum, n = 10)
 
 ## overview of recent data ====
 
-datelist = unique(signalwide$yyyymm) %>% sort(decreasing = T)
-datelist = datelist[1:24]
-
-
-recent_nobs = signalwide %>% 
-  select(-permno) %>% 
-  filter(yyyymm %in% datelist) %>% 
-  group_by(yyyymm) %>% 
-  summarize_all(funs(sum(!is.na(.)))) %>% 
+# a few annual signals extend past CRSP, so end at the last month with CRSP data
+recent_nobs = obs %>%
+  filter(yyyymm <= max(yyyymm[STreversal > 0])) %>%
+  slice_max(yyyymm, n = 12) %>%
+  arrange(yyyymm) %>%
+  column_to_rownames('yyyymm') %>%
   t()
 
-
 print('Number of firms with data in recent months')
-print(recent_nobs[1:10 , 1:12])
+print(head(recent_nobs, 10))
 print('...')
-print(recent_nobs[c(1, nrow(recent_nobs) - 0:10), 1:12])
+print(tail(recent_nobs, 10))
